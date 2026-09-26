@@ -1,0 +1,68 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['name','email','role'])",
+        "role": {
+          ".validate": "newData.val() === 'seller' || newData.val() === 'buyer'"
+        },
+        "phone": { ".validate": "newData.isString() && newData.val().length >= 9" },
+        "email": { ".validate": "newData.isString()" }
+      }
+    },
+
+    "offers": {
+      ".read": true,
+      ".indexOn": ["createdAt", "ownerId", "productId", "category", "status"],
+      "$offerId": {
+        ".write": "auth != null && (!data.exists() || data.child('ownerId').val() === auth.uid || (auth.token.admin === true))",
+
+        ".validate": "newData.hasChildren(['ownerId','ownerRole','productId','pricePerKg','quantity','status'])",
+
+        "ownerId": {
+          ".validate": "newData.val() === auth.uid || (data.exists() && newData.val() === data.child('ownerId').val())"
+        },
+        "ownerRole": { ".validate": "newData.val() === 'seller' || newData.val() === 'buyer'" },
+        "pricePerKg": { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "quantity": { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "status": {
+          ".validate": "newData.val() === 'active' || newData.val() === 'paused' || newData.val() === 'sold' || newData.val() === 'fulfilled' || newData.val() === 'expired' || newData.val() === 'deleted'"
+        },
+
+        "views": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() >= data.val()"
+        },
+        "phoneReveals": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() >= data.val()"
+        }
+      }
+    },
+
+    "savedOffers": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "supportMessages": {
+      ".read": "auth != null && auth.token.admin === true",
+      ".write": "auth != null",
+      "$messageId": {
+        ".validate": "newData.hasChildren(['name','email','subject','message'])"
+      }
+    },
+
+    "adminOnly": {
+      ".read": "auth != null && auth.token.admin === true",
+      ".write": "auth != null && auth.token.admin === true"
+    }
+  }
+}

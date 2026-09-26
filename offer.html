@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offer — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/marketplace.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+  </div>
+</header>
+
+<main class="container" style="padding-top:20px" id="page-body">
+  <div class="skeleton" style="height:340px;border-radius:16px"></div>
+</main>
+
+<script type="module">
+import { getOffer, recordView, recordPhoneReveal, trackCallClick, toggleSaveOffer, getSavedOfferIds, listRecentOffers } from "./js/offers.js";
+import { getProduct, placeholderFor } from "./js/products.js";
+import { haversineKm, formatDistance, formatDistanceApprox, estimateTransportCost, calcNetReturn, formatETB, DEFAULT_TRANSPORT_RATE_ETB_PER_KM } from "./js/calculations.js";
+import { getUserProfile, watchAuthState } from "./js/auth.js";
+import { toast, escapeHtml, getStoredLocation } from "./js/app.js";
+
+const offerId = new URLSearchParams(location.search).get("id");
+const body = document.getElementById("page-body");
+let currentUser = null;
+let offer = null;
+
+if (!offerId) {
+  body.innerHTML = `<div class="empty-state"><div class="emoji">🔍</div><h3>Offer not found</h3><a href="index.html" class="btn btn-primary">Back to marketplace</a></div>`;
+} else {
+  load();
+}
+
+watchAuthState(({ user }) => { currentUser = user; });
+
+async function load() {
+  try {
+    offer = await getOffer(offerId);
+  } catch (e) {
+    body.innerHTML = emptyBlock("We couldn't connect. Please check your internet connection and try again.");
+    return;
+  }
+  if (!offer) { body.innerHTML = emptyBlock("This offer could not be found. It may have been removed."); return; }
+
+  recordView(offerId);
+  const owner = await getUserProfile(offer.ownerId).catch(() => null);
+  const myLoc = getStoredLocation();
+  const dist = myLoc && offer.latitude ? haversineKm(myLoc.lat, myLoc.lng, offer.latitude, offer.longitude) : null;
+  const transport = offer.reportedTransportCost ?? (dist !== null ? estimateTransportCost(dist) : null);
+  const isEstimate = offer.reportedTransportCost == null;
+  const econ = transport !== null ? calcNetReturn({ pricePerKg: offer.pricePerKg, quantityKg: offer.quantityKg, transportCost: transport }) : null;
+  const product = getProduct(offer.productId) || { category: offer.category };
+  const img = product.image || placeholderFor(product);
+  const isSeller = offer.ownerRole === "seller";
+
+  body.innerHTML = `
+    <div class="offer-detail-grid">
+      <div>
+        <div class="detail-image"><img src="${img}" alt="${escapeHtml(offer.productName)}" onerror="this.src='${placeholderFor(product)}'"></div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <span class="badge ${offer.status==='active'?'badge-active':'badge-sold'}">${offer.status}</span>
+          ${offer.isDemo ? '<span class="badge badge-demo">DEMO DATA</span>' : ''}
+          <span class="badge" style="background:var(--sage-100);color:var(--ink-soft)">${isSeller ? 'Selling' : 'Looking to buy'}</span>
+        </div>
+      </div>
+      <div>
+        <h1 style="font-size:1.6rem">${escapeHtml(offer.productName)}</h1>
+        <div class="price" style="font-size:1.6rem;font-family:var(--font-display);font-weight:700;color:var(--forest-800)">${offer.pricePerKg} ETB <small style="font-size:.9rem;color:var(--ink-faint)">/kg</small> ${offer.priceType==='negotiable'?'<span class="badge badge-negotiable">Negotiable</span>':''}</div>
+        <div class="stat-row">
+          <div class="stat"><strong>${offer.quantity} ${offer.unit}</strong>Quantity</div>
+          <div class="stat"><strong>${escapeHtml(offer.city || 'GPS location')}</strong>Location</div>
+          <div class="stat"><strong>${dist !== null ? formatDistance(dist) : '—'}</strong>${dist !== null ? formatDistanceApprox(dist) : 'Set your location to see distance'}</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><strong>👁 ${offer.views || 0}</strong>Views</div>
+          <div class="stat"><strong>📞 ${offer.phoneReveals || 0}</strong>Phone reveals</div>
+        </div>
+
+        ${offer.description ? `<p>${escapeHtml(offer.description)}</p>` : ""}
+        ${offer.quality ? `<p><strong>Quality/Grade:</strong> ${escapeHtml(offer.quality)}</p>` : ""}
+        ${offer.harvestInfo ? `<p><strong>Harvest info:</strong> ${escapeHtml(offer.harvestInfo)}</p>` : ""}
+
+        ${econ ? `
+        <h3 style="margin-top:24px">Estimated economics</h3>
+        <div class="econ-box">
+          <div class="econ-row"><span>Selling value</span><span>${formatETB(econ.gross)}</span></div>
+          <div class="econ-row"><span>${isEstimate ? `Estimated transportation (@ ${DEFAULT_TRANSPORT_RATE_ETB_PER_KM} ETB/km)` : "Reported transportation"}</span><span>${formatETB(econ.transportCost)}</span></div>
+          <div class="econ-row total"><span>Estimated net return</span><span>${formatETB(econ.net)}</span></div>
+        </div>
+        <p class="hint text-muted">Estimated using the information provided. Actual transportation and transaction costs may differ.</p>
+        ` : ""}
+
+        <div id="contact-box"></div>
+
+        <div style="margin-top:14px">
+          <button class="btn btn-outline" id="save-btn">🤍 Save offer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>${isSeller ? "Compare other sellers" : "Compare other buyers"}</h2></div>
+    <div class="compare-list" id="compare-list"><div class="skeleton" style="height:70px"></div></div>
+  `;
+
+  renderContactBox(owner);
+  document.getElementById("save-btn").addEventListener("click", async () => {
+    if (!currentUser) { toast("Please sign in to save offers."); return; }
+    const saved = await toggleSaveOffer(currentUser.uid, offerId);
+    document.getElementById("save-btn").innerHTML = saved ? "❤️ Saved" : "🤍 Save offer";
+  });
+
+  renderComparison(offer, myLoc);
+}
+
+function renderContactBox(owner) {
+  const box = document.getElementById("contact-box");
+  box.innerHTML = `<button class="btn btn-primary btn-block" id="reveal-btn" style="margin-top:16px">📞 Show phone number</button>`;
+  document.getElementById("reveal-btn").addEventListener("click", async () => {
+    const phone = owner?.phone || "Not available";
+    box.innerHTML = `
+      <div class="phone-box">
+        <div class="num">${escapeHtml(phone)}</div>
+        <a class="btn btn-accent" href="tel:${encodeURIComponent(phone)}" id="call-btn">📞 Call</a>
+      </div>`;
+    document.getElementById("call-btn").addEventListener("click", () => trackCallClick(offerId));
+    try { await recordPhoneReveal(offerId); } catch (e) {}
+  }, { once: true });
+}
+
+async function renderComparison(offer, myLoc) {
+  const all = await listRecentOffers(200).catch(() => []);
+  const peers = all.filter(o => o.id !== offer.id && o.status === "active" && o.ownerRole === offer.ownerRole && o.productId === offer.productId);
+  const list = document.getElementById("compare-list");
+  if (!peers.length) {
+    list.innerHTML = `<p class="text-muted">No other ${offer.ownerRole === 'seller' ? 'sellers' : 'buyers'} found for this product yet.</p>`;
+    return;
+  }
+  const withEcon = peers.map(o => {
+    const dist = myLoc && o.latitude ? haversineKm(myLoc.lat, myLoc.lng, o.latitude, o.longitude) : null;
+    const transport = o.reportedTransportCost ?? (dist !== null ? estimateTransportCost(dist) : null);
+    const econ = transport !== null ? calcNetReturn({ pricePerKg: o.pricePerKg, quantityKg: o.quantityKg, transportCost: transport }) : null;
+    return { ...o, _dist: dist, _net: econ?.net ?? null, _transport: transport };
+  }).sort((a, b) => (b._net ?? -Infinity) - (a._net ?? -Infinity));
+  const bestId = withEcon[0]?._net != null ? withEcon[0].id : null;
+
+  list.innerHTML = withEcon.map(o => `
+    <div class="compare-item ${o.id === bestId ? 'best' : ''}">
+      <div>
+        <strong>${escapeHtml(o.productName)}</strong>
+        <div class="text-muted" style="font-size:.82rem">${o.pricePerKg} ETB/kg · ${o.quantity} ${o.unit} ${o._dist !== null ? '· ' + formatDistance(o._dist) : ''}</div>
+      </div>
+      <div class="cright">
+        ${o._net != null ? `<strong>${formatETB(o._net)}</strong><div class="text-muted" style="font-size:.72rem">est. net return</div>` : `<a href="offer.html?id=${o.id}" class="btn btn-sm btn-outline">View</a>`}
+      </div>
+    </div>
+  `).join("");
+}
+
+function emptyBlock(msg) {
+  return `<div class="empty-state"><div class="emoji">⚠️</div><h3>${escapeHtml(msg)}</h3><a href="index.html" class="btn btn-primary">Back to marketplace</a></div>`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container"><a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket <span class="text-muted" style="font-size:.8rem;font-weight:600">/ Admin</span></a></div>
+</header>
+<main class="container">
+  <div id="gate" class="gate-notice">
+    <h3>Checking access…</h3>
+  </div>
+  <div id="content" style="display:none">
+    <div class="page-head"><h1>Research &amp; Admin Dashboard</h1><p class="text-muted">Aggregated, read-only view. Not linked from normal navigation.</p></div>
+    <div class="admin-metrics">
+      <div class="stat-card"><div class="num" id="m-farmers">0</div><div class="lbl">Farmers</div></div>
+      <div class="stat-card"><div class="num" id="m-buyers">0</div><div class="lbl">Buyers</div></div>
+      <div class="stat-card"><div class="num" id="m-offers">0</div><div class="lbl">Total Offers</div></div>
+      <div class="stat-card"><div class="num" id="m-active">0</div><div class="lbl">Active Offers</div></div>
+      <div class="stat-card"><div class="num" id="m-avgprice">0</div><div class="lbl">Avg. price (ETB/kg)</div></div>
+      <div class="stat-card"><div class="num" id="m-views">0</div><div class="lbl">Total Views</div></div>
+      <div class="stat-card"><div class="num" id="m-reveals">0</div><div class="lbl">Phone Reveals</div></div>
+    </div>
+
+    <div class="section-title"><h2>Research data export</h2></div>
+    <p class="text-muted">Exports anonymized participant IDs — no names or phone numbers included.</p>
+    <button class="btn btn-primary" id="export-btn">⬇ Export offers as CSV</button>
+
+    <div class="section-title"><h2>Recent offers</h2></div>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="offers-table">
+        <thead><tr><th>Product</th><th>Role</th><th>Price</th><th>Qty</th><th>City</th><th>Status</th><th>Views</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="section-title"><h2>Support messages</h2></div>
+    <div style="overflow-x:auto">
+      <table class="admin-table" id="support-table">
+        <thead><tr><th>Name</th><th>Subject</th><th>Message</th><th>Email</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { watchAuthState } from "./js/auth.js";
+import { isAdmin, fetchAdminOverview, buildResearchCsv } from "./js/admin.js";
+import { setOfferStatus, deleteOffer } from "./js/offers.js";
+import { escapeHtml, toast } from "./js/app.js";
+
+let overview = null;
+
+watchAuthState(async ({ user }) => {
+  const gate = document.getElementById("gate");
+  if (!user) {
+    gate.innerHTML = `<h3>Sign in required</h3><a href="login.html" class="btn btn-primary">Sign in</a>`;
+    return;
+  }
+  const admin = await isAdmin(user);
+  if (!admin) {
+    gate.innerHTML = `<h3>You don't have access to this page</h3><p class="text-muted">This area is restricted to AgriMarket admins. See the README for how the admin custom claim is granted.</p><a href="index.html" class="btn btn-outline">Back to AgriMarket</a>`;
+    return;
+  }
+  gate.style.display = "none";
+  document.getElementById("content").style.display = "block";
+  load();
+});
+
+async function load() {
+  try {
+    overview = await fetchAdminOverview();
+  } catch (e) {
+    toast("We couldn't connect. Please check your internet connection and try again.", "error");
+    return;
+  }
+  document.getElementById("m-farmers").textContent = overview.farmers;
+  document.getElementById("m-buyers").textContent = overview.buyers;
+  document.getElementById("m-offers").textContent = overview.offers.length;
+  document.getElementById("m-active").textContent = overview.activeOffers.length;
+  document.getElementById("m-avgprice").textContent = Math.round(overview.avgPrice);
+  document.getElementById("m-views").textContent = overview.totalViews;
+  document.getElementById("m-reveals").textContent = overview.totalReveals;
+
+  document.querySelector("#offers-table tbody").innerHTML = overview.offers.slice(0, 100).map(o => `
+    <tr>
+      <td>${escapeHtml(o.productName || "")}</td><td>${o.ownerRole}</td><td>${o.pricePerKg} ETB</td>
+      <td>${o.quantity} ${o.unit}</td><td>${escapeHtml(o.city || "—")}</td><td>${o.status}</td><td>${o.views||0}</td>
+      <td><button class="btn btn-sm btn-danger" data-remove="${o.id}">Remove</button></td>
+    </tr>`).join("");
+
+  document.querySelector("#support-table tbody").innerHTML = overview.support.slice(0, 100).map(m => `
+    <tr><td>${escapeHtml(m.name||"")}</td><td>${escapeHtml(m.subject||"")}</td><td style="max-width:280px">${escapeHtml((m.message||"").slice(0,140))}</td><td>${escapeHtml(m.email||"")}</td></tr>`).join("");
+
+  document.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", async () => {
+    if (!confirm("Remove this offer from the marketplace?")) return;
+    await deleteOffer(btn.dataset.remove);
+    toast("Offer removed.");
+    load();
+  }));
+}
+
+document.getElementById("export-btn").addEventListener("click", () => {
+  const csv = buildResearchCsv(overview.offers);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `agrimarket-research-export-${Date.now()}.csv`;
+  a.click();
+});
+</script>
+</body>
+</html>

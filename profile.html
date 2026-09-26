@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+  </div>
+</header>
+<main class="container" style="max-width:560px">
+  <div id="gate-notice" style="display:none" class="gate-notice">
+    <h3>Sign in to view your profile</h3>
+    <a href="login.html" class="btn btn-primary">Sign in</a>
+  </div>
+
+  <div id="content" style="display:none">
+    <div class="profile-head">
+      <div class="avatar-circle" id="avatar"></div>
+      <div>
+        <h2 id="p-name" style="margin:0;font-size:1.3rem"></h2>
+        <p class="text-muted" style="margin:0" id="p-role"></p>
+      </div>
+    </div>
+
+    <div class="surface pad-md" style="margin-bottom:16px">
+      <div class="field"><label>Email</label><div id="p-email" class="text-muted"></div></div>
+      <div class="field"><label>Phone</label><div id="p-phone" class="text-muted"></div></div>
+      <div class="field"><label>Location</label><div id="p-location" class="text-muted"></div></div>
+      <div class="field"><label>Joined</label><div id="p-joined" class="text-muted"></div></div>
+    </div>
+
+    <div class="profile-menu">
+      <button id="edit-btn">Edit profile <span>→</span></button>
+      <button id="pw-btn">Change password <span>→</span></button>
+      <a href="#" id="location-btn">Location settings <span>→</span></a>
+      <button id="signout-btn" style="color:var(--danger)">Sign out</button>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal-sheet">
+    <h3>Edit profile</h3>
+    <div class="field"><label for="e-name">Full name</label><input id="e-name"></div>
+    <div class="field"><label for="e-phone">Phone number</label><input id="e-phone"></div>
+    <div class="step-actions"><button class="btn btn-outline" data-close-modal>Cancel</button><button class="btn btn-primary" id="save-profile-btn">Save</button></div>
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <a href="index.html" data-nav-link><span class="bn-icon">🏠</span>Home</a>
+  <a href="index.html#search" data-nav-link><span class="bn-icon">🔎</span>Search</a>
+  <a href="post-offer.html" class="post-btn"><span class="bn-icon">➕</span>Post</a>
+  <a href="my-offers.html" data-nav-link><span class="bn-icon">📊</span>My Offers</a>
+  <a href="profile.html" data-nav-link class="active"><span class="bn-icon">👤</span>Profile</a>
+</nav>
+
+<script type="module">
+import { requireAuth, updateUserProfile, resetPassword, logOut } from "./js/auth.js";
+import { toast, escapeHtml, getBrowserLocation, setStoredLocation } from "./js/app.js";
+
+let uid = null, profile = null;
+
+requireAuth({
+  onReady: (user, p) => {
+    uid = user.uid; profile = p;
+    document.getElementById("content").style.display = "block";
+    render();
+  },
+  onSignedOut: () => document.getElementById("gate-notice").style.display = "block",
+  onIncompleteProfile: () => document.getElementById("gate-notice").style.display = "block"
+});
+
+function render() {
+  document.getElementById("avatar").textContent = (profile.name || "?").charAt(0).toUpperCase();
+  document.getElementById("p-name").textContent = profile.name || "—";
+  document.getElementById("p-role").textContent = profile.role === "seller" ? "Farmer / Seller" : "Buyer";
+  document.getElementById("p-email").textContent = profile.email || "—";
+  document.getElementById("p-phone").textContent = profile.phone || "—";
+  document.getElementById("p-location").textContent = profile.city ? `${profile.city}, ${profile.zone || ""}` : (profile.latitude ? "GPS location set" : "Not set");
+  document.getElementById("p-joined").textContent = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "—";
+}
+
+document.getElementById("edit-btn").addEventListener("click", () => {
+  document.getElementById("e-name").value = profile.name || "";
+  document.getElementById("e-phone").value = profile.phone || "";
+  document.getElementById("edit-modal").classList.add("open");
+});
+document.getElementById("save-profile-btn").addEventListener("click", async () => {
+  try {
+    const name = document.getElementById("e-name").value.trim();
+    const phone = document.getElementById("e-phone").value.trim();
+    await updateUserProfile(uid, { name, phone });
+    profile.name = name; profile.phone = phone;
+    render();
+    document.getElementById("edit-modal").classList.remove("open");
+    toast("Profile updated.");
+  } catch (e) { toast("Something went wrong. Please try again.", "error"); }
+});
+
+document.getElementById("pw-btn").addEventListener("click", async () => {
+  try { await resetPassword(profile.email); toast("Password reset email sent."); }
+  catch (e) { toast("Something went wrong. Please try again.", "error"); }
+});
+
+document.getElementById("location-btn").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const loc = await getBrowserLocation();
+  if (loc) {
+    await updateUserProfile(uid, { latitude: loc.lat, longitude: loc.lng, region: null, zone: null, city: null });
+    setStoredLocation({ lat: loc.lat, lng: loc.lng });
+    profile.latitude = loc.lat; profile.city = null;
+    render();
+    toast("Location updated.");
+  } else {
+    toast("Location access was denied. You can select your location manually.", "error");
+  }
+});
+
+document.getElementById("signout-btn").addEventListener("click", async () => {
+  await logOut();
+  location.href = "index.html";
+});
+</script>
+</body>
+</html>

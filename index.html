@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgriMarket — Connect. Compare. Sell.</title>
+<meta name="description" content="Find better agricultural market opportunities near you. Compare prices, distance and estimated net returns across Ethiopia.">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/marketplace.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+    <div class="header-search">
+      <input type="search" id="search-input" placeholder="Search coffee, maize, teff…" aria-label="Search products">
+    </div>
+    <nav class="header-nav" aria-label="Primary">
+      <a href="index.html" data-nav-link class="active">Home</a>
+      <a href="my-offers.html" data-nav-link>My Offers</a>
+      <a href="saved.html" data-nav-link>Saved</a>
+      <a href="support.html" data-nav-link>Support</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="notif-btn" aria-label="Notifications">🔔</button>
+      <a class="icon-btn" href="profile.html" aria-label="Profile">👤</a>
+      <a class="btn btn-accent btn-sm" href="post-offer.html" id="post-offer-btn" style="display:none">+ Post</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="hero-inner">
+      <span class="hero-tag">🇪🇹 Built for Ethiopian agriculture</span>
+      <h1 id="hero-heading">Find agricultural opportunities near you.</h1>
+      <p>Compare prices, quantities, locations and estimated transportation costs — AgriMarket does the math for you.</p>
+      <div class="hero-actions">
+        <a href="#marketplace" class="btn btn-accent">Browse offers</a>
+        <a href="post-offer.html" class="btn" style="background:rgba(255,255,255,.14);color:#fff">Post an offer</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="container">
+    <button class="location-bar" id="location-bar">
+      📍 <span id="location-label">Set your location</span>
+      <button class="btn btn-ghost btn-sm" type="button" id="location-change-btn">Change</button>
+    </button>
+
+    <div class="category-scroll" id="category-scroll" role="tablist" aria-label="Categories"></div>
+
+    <div class="section-title">
+      <h2 id="offers-title">Offers near you</h2>
+    </div>
+
+    <div class="toolbar">
+      <select id="sort-select" aria-label="Sort by">
+        <option value="recommended">Sort: Recommended</option>
+        <option value="net_return">Highest net return</option>
+        <option value="price_low">Lowest price</option>
+        <option value="price_high">Highest price</option>
+        <option value="closest">Closest</option>
+        <option value="newest">Newest</option>
+        <option value="quantity">Largest quantity</option>
+      </select>
+      <button class="btn btn-outline btn-sm filter-btn" id="open-filters">⚙️ Filters</button>
+    </div>
+
+    <div class="offer-grid" id="offer-grid"></div>
+    <div id="empty-state" style="display:none"></div>
+  </div>
+</main>
+
+<!-- Filter drawer -->
+<div class="modal-backdrop" id="filter-modal">
+  <div class="modal-sheet">
+    <div class="filter-drawer">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3>Filters</h3>
+        <button class="icon-btn" data-close-modal aria-label="Close">✕</button>
+      </div>
+      <div class="field">
+        <label for="f-maxdist">Maximum distance (km)</label>
+        <input type="number" id="f-maxdist" placeholder="e.g. 50" min="0">
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="f-minprice">Min price (ETB/kg)</label><input type="number" id="f-minprice" min="0"></div>
+        <div class="field"><label for="f-maxprice">Max price (ETB/kg)</label><input type="number" id="f-maxprice" min="0"></div>
+      </div>
+      <div class="field">
+        <label for="f-pricetype">Price type</label>
+        <select id="f-pricetype"><option value="">Any</option><option value="fixed">Fixed</option><option value="negotiable">Negotiable</option></select>
+      </div>
+      <div class="step-actions">
+        <button class="btn btn-outline" id="clear-filters">Clear</button>
+        <button class="btn btn-primary" id="apply-filters">Apply filters</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="bottom-nav" aria-label="Primary mobile">
+  <a href="index.html" data-nav-link class="active"><span class="bn-icon">🏠</span>Home</a>
+  <a href="index.html#search" data-nav-link><span class="bn-icon">🔎</span>Search</a>
+  <a href="post-offer.html" class="post-btn"><span class="bn-icon">➕</span>Post</a>
+  <a href="my-offers.html" data-nav-link><span class="bn-icon">📊</span>My Offers</a>
+  <a href="profile.html" data-nav-link><span class="bn-icon">👤</span>Profile</a>
+</nav>
+
+<script type="module">
+import { watchAuthState } from "./js/auth.js";
+import { listRecentOffers, getSavedOfferIds, toggleSaveOffer } from "./js/offers.js";
+import { CATEGORIES, PRODUCTS, getProduct, placeholderFor, bindImageFallback } from "./js/products.js";
+import { haversineKm, formatDistance, estimateTransportCost, calcNetReturn, formatETB } from "./js/calculations.js";
+import { toast, debounce, skeletonCards, escapeHtml, getStoredLocation, setStoredLocation, getBrowserLocation } from "./js/app.js";
+
+let currentUser = null;
+let currentProfile = null;
+let allOffers = [];
+let savedIds = new Set();
+let activeCategory = null;
+let searchTerm = "";
+let filters = {};
+let sortMode = "recommended";
+let myLoc = getStoredLocation();
+
+const grid = document.getElementById("offer-grid");
+const emptyState = document.getElementById("empty-state");
+const heroHeading = document.getElementById("hero-heading");
+const offersTitle = document.getElementById("offers-title");
+
+renderCategories();
+updateLocationLabel();
+loadOffers();
+
+watchAuthState(async ({ user, profile }) => {
+  currentUser = user;
+  currentProfile = profile;
+  document.getElementById("post-offer-btn").style.display = user ? "inline-flex" : "none";
+  if (user && !myLoc && profile?.latitude) {
+    myLoc = { lat: profile.latitude, lng: profile.longitude };
+    setStoredLocation(myLoc);
+  }
+  if (user) savedIds = new Set(await getSavedOfferIds(user.uid).catch(() => []));
+  if (profile?.role === "seller") {
+    heroHeading.textContent = "Find buyers looking for your harvest.";
+    offersTitle.textContent = "Buyers looking for your products";
+  } else if (profile?.role === "buyer") {
+    heroHeading.textContent = "Find fresh produce near you.";
+    offersTitle.textContent = "Products available from farmers";
+  }
+  renderGrid();
+});
+
+async function loadOffers() {
+  skeletonCards(grid, 8);
+  try {
+    allOffers = await listRecentOffers(200);
+  } catch (e) {
+    toast("We couldn't connect. Please check your internet connection and try again.", "error");
+    allOffers = [];
+  }
+  renderGrid();
+}
+
+function renderCategories() {
+  const wrap = document.getElementById("category-scroll");
+  wrap.innerHTML = ["all", ...CATEGORIES.map(c => c.id)].map(id => {
+    const cat = id === "all" ? { name: "All", emoji: "🧺" } : CATEGORIES.find(c => c.id === id);
+    return `<button class="category-pill ${activeCategory === id || (id === "all" && !activeCategory) ? "active" : ""}" data-cat="${id}">
+      <span class="emo">${cat.emoji}</span><span class="lbl">${cat.name}</span>
+    </button>`;
+  }).join("");
+  wrap.querySelectorAll(".category-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      activeCategory = btn.dataset.cat === "all" ? null : btn.dataset.cat;
+      renderCategories();
+      renderGrid();
+    });
+  });
+}
+
+function renderGrid() {
+  // Role-aware filtering: sellers see buyer demand, buyers see seller supply (§12)
+  let list = allOffers.filter(o => o.status === "active");
+  if (currentProfile?.role === "seller") list = list.filter(o => o.ownerRole === "buyer");
+  else if (currentProfile?.role === "buyer") list = list.filter(o => o.ownerRole === "seller");
+
+  if (activeCategory) list = list.filter(o => o.category === activeCategory);
+  if (searchTerm) {
+    const s = searchTerm.toLowerCase();
+    list = list.filter(o => o.productName?.toLowerCase().includes(s) || o.city?.toLowerCase().includes(s));
+  }
+  if (filters.minPrice) list = list.filter(o => o.pricePerKg >= filters.minPrice);
+  if (filters.maxPrice) list = list.filter(o => o.pricePerKg <= filters.maxPrice);
+  if (filters.priceType) list = list.filter(o => o.priceType === filters.priceType);
+
+  list = list.map(o => {
+    const dist = myLoc && o.latitude ? haversineKm(myLoc.lat, myLoc.lng, o.latitude, o.longitude) : null;
+    const transport = dist !== null ? estimateTransportCost(dist) : null;
+    const econ = transport !== null ? calcNetReturn({ pricePerKg: o.pricePerKg, quantityKg: o.quantityKg, transportCost: transport }) : null;
+    return { ...o, _dist: dist, _netReturn: econ?.net ?? null };
+  });
+
+  if (filters.maxDist) list = list.filter(o => o._dist === null || o._dist <= filters.maxDist);
+
+  list = sortOffers(list, sortMode);
+
+  if (!list.length) {
+    grid.innerHTML = "";
+    emptyState.style.display = "block";
+    emptyState.innerHTML = `<div class="empty-state"><div class="emoji">🌾</div>
+      <h3>No offers found</h3><p>Try changing your location or search filters.</p>
+      <a href="post-offer.html" class="btn btn-primary">Post your first offer</a></div>`;
+    return;
+  }
+  emptyState.style.display = "none";
+  grid.innerHTML = list.map(offerCardHtml).join("");
+  grid.querySelectorAll("[data-save]").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!currentUser) { toast("Please sign in to save offers."); return; }
+      const id = btn.dataset.save;
+      const saved = await toggleSaveOffer(currentUser.uid, id);
+      if (saved) savedIds.add(id); else savedIds.delete(id);
+      btn.textContent = saved ? "❤️" : "🤍";
+    });
+  });
+  grid.querySelectorAll("img[data-product]").forEach(img => {
+    bindImageFallback(img, getProduct(img.dataset.product));
+  });
+}
+
+function sortOffers(list, mode) {
+  const arr = [...list];
+  switch (mode) {
+    case "net_return": return arr.sort((a, b) => (b._netReturn ?? -Infinity) - (a._netReturn ?? -Infinity));
+    case "price_low": return arr.sort((a, b) => a.pricePerKg - b.pricePerKg);
+    case "price_high": return arr.sort((a, b) => b.pricePerKg - a.pricePerKg);
+    case "closest": return arr.sort((a, b) => (a._dist ?? Infinity) - (b._dist ?? Infinity));
+    case "newest": return arr.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    case "quantity": return arr.sort((a, b) => b.quantityKg - a.quantityKg);
+    default: return arr; // "Recommended" = natural/most-recent order, transparently labelled
+  }
+}
+
+function offerCardHtml(o) {
+  const product = getProduct(o.productId) || { category: o.category };
+  const img = product.image || placeholderFor(product);
+  const isSaved = savedIds.has(o.id);
+  return `
+  <a class="offer-card" href="offer.html?id=${o.id}">
+    <div class="thumb">
+      <img src="${img}" data-product="${o.productId}" alt="${escapeHtml(o.productName)}" loading="lazy">
+      ${o.isDemo ? '<span class="badge badge-demo demo-tag">DEMO DATA</span>' : ""}
+      <button class="save-btn" data-save="${o.id}" aria-label="Save offer">${isSaved ? "❤️" : "🤍"}</button>
+    </div>
+    <div class="body">
+      <div class="name">${escapeHtml(o.productName)}</div>
+      <div class="price">${o.pricePerKg} ETB<small> /kg</small> ${o.priceType === "negotiable" ? '<span class="badge badge-negotiable">Negotiable</span>' : ""}</div>
+      <div class="meta"><span>📦 ${o.quantity} ${o.unit}</span><span>📍 ${escapeHtml(o.city || "—")}</span></div>
+      ${o._dist !== null ? `<div class="meta"><span>📏 ${formatDistance(o._dist)}</span></div>` : ""}
+      ${o._netReturn !== null ? `<div class="net-return">Est. net return: ${formatETB(o._netReturn)}</div>` : ""}
+      <div class="view-link">View offer →</div>
+    </div>
+  </a>`;
+}
+
+document.getElementById("search-input").addEventListener("input", debounce((e) => {
+  searchTerm = e.target.value.trim();
+  renderGrid();
+}, 300));
+
+document.getElementById("sort-select").addEventListener("change", (e) => { sortMode = e.target.value; renderGrid(); });
+document.getElementById("open-filters").addEventListener("click", () => document.getElementById("filter-modal").classList.add("open"));
+document.getElementById("apply-filters").addEventListener("click", () => {
+  filters = {
+    maxDist: Number(document.getElementById("f-maxdist").value) || null,
+    minPrice: Number(document.getElementById("f-minprice").value) || null,
+    maxPrice: Number(document.getElementById("f-maxprice").value) || null,
+    priceType: document.getElementById("f-pricetype").value || null
+  };
+  document.getElementById("filter-modal").classList.remove("open");
+  renderGrid();
+});
+document.getElementById("clear-filters").addEventListener("click", () => {
+  filters = {};
+  ["f-maxdist", "f-minprice", "f-maxprice"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("f-pricetype").value = "";
+  renderGrid();
+});
+
+function updateLocationLabel() {
+  const label = document.getElementById("location-label");
+  label.textContent = myLoc ? "Using your location" : "Set your location";
+}
+document.getElementById("location-change-btn").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  const loc = await getBrowserLocation();
+  if (loc) {
+    myLoc = loc;
+    setStoredLocation(loc);
+    updateLocationLabel();
+    toast("Location updated.");
+    renderGrid();
+  } else {
+    toast("Location access was denied. You can select your location manually in your profile.", "error");
+  }
+});
+</script>
+</body>
+</html>

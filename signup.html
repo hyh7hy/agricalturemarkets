@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create your account — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card surface pad-lg">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+    <div class="step-dots" id="step-dots"></div>
+
+    <!-- STEP 1: account details (hidden entirely in "complete profile" mode) -->
+    <section class="step-panel" data-step="1">
+      <div class="auth-head"><h1 style="font-size:1.4rem">Create your AgriMarket account</h1></div>
+      <div class="field"><label for="s-name">Full name</label><input id="s-name" autocomplete="name"></div>
+      <div class="field"><label for="s-phone">Phone number</label><input id="s-phone" type="tel" placeholder="09XXXXXXXX" autocomplete="tel"></div>
+      <div class="field"><label for="s-email">Email</label><input id="s-email" type="email" autocomplete="email"></div>
+      <div class="field-row">
+        <div class="field"><label for="s-pass">Password</label><input id="s-pass" type="password" autocomplete="new-password"></div>
+        <div class="field"><label for="s-pass2">Confirm password</label><input id="s-pass2" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="step-actions"><button class="btn btn-primary" id="to-step2">Continue</button></div>
+      <div class="auth-divider">or</div>
+      <button class="btn btn-google btn-block" id="google-btn" type="button">Continue with Google</button>
+      <p class="auth-foot">Already have an account? <a href="login.html">Sign in</a></p>
+    </section>
+
+    <!-- STEP 2: role -->
+    <section class="step-panel" data-step="2">
+      <div class="auth-head"><h1 style="font-size:1.4rem">I am a…</h1><p>This determines what you'll see on AgriMarket.</p></div>
+      <div class="role-cards">
+        <button type="button" class="role-card" data-role="seller">
+          <span class="r-emoji">👨‍🌾</span><strong>Farmer / Seller</strong><span>I want to sell agricultural products.</span>
+        </button>
+        <button type="button" class="role-card" data-role="buyer">
+          <span class="r-emoji">🏪</span><strong>Buyer</strong><span>I want to buy agricultural products.</span>
+        </button>
+      </div>
+      <div class="step-actions">
+        <button class="btn btn-outline" id="back-to-1">Back</button>
+        <button class="btn btn-primary" id="to-step3">Continue</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: location -->
+    <section class="step-panel" data-step="3">
+      <div class="auth-head"><h1 style="font-size:1.4rem">Where are you located?</h1><p>Used to show distance and nearby offers.</p></div>
+      <div class="field" id="complete-phone-field" style="display:none"><label for="s-phone-2">Phone number</label><input id="s-phone-2" type="tel" placeholder="09XXXXXXXX"></div>
+      <button type="button" class="btn btn-outline btn-block" id="use-gps-btn" style="margin-bottom:16px">📍 Use my current location</button>
+      <div class="auth-divider">or select manually</div>
+      <div class="field"><label for="s-region">Region</label><select id="s-region"></select></div>
+      <div class="field"><label for="s-zone">Zone</label><select id="s-zone"></select></div>
+      <div class="field"><label for="s-city">City / Town</label><select id="s-city"></select></div>
+      <p class="hint" id="gps-status"></p>
+      <div class="step-actions">
+        <button class="btn btn-outline" id="back-to-2">Back</button>
+        <button class="btn btn-primary" id="finish-signup">Create account</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="module">
+import { signUpWithEmail, completeGoogleProfile, signInWithGoogle, friendlyAuthError } from "./js/auth.js";
+import { getRegions, getZones, getCities, findCoords } from "./js/locations.js";
+import { getBrowserLocation, toast, setStoredLocation } from "./js/app.js";
+
+const params = new URLSearchParams(location.search);
+const completeMode = params.get("complete") === "1";
+const completeUid = params.get("uid");
+
+let step = completeMode ? 2 : 1;
+let role = null;
+let gpsCoords = null;
+const state = { name: "", phone: "", email: "", password: "" };
+
+const steps = [1, 2, 3];
+function renderDots() {
+  document.getElementById("step-dots").innerHTML = steps.map(s =>
+    `<span class="dot ${s === step ? "active" : ""}"></span>`).join("");
+}
+function showStep(n) {
+  step = n;
+  document.querySelectorAll(".step-panel").forEach(p => p.classList.toggle("active", Number(p.dataset.step) === n));
+  renderDots();
+}
+if (completeMode) {
+  document.querySelector('[data-step="1"]').remove();
+  document.getElementById("complete-phone-field").style.display = "block";
+}
+showStep(step);
+
+// ---- Step 1 ----
+document.getElementById("to-step2")?.addEventListener("click", () => {
+  state.name = document.getElementById("s-name").value.trim();
+  state.phone = document.getElementById("s-phone").value.trim();
+  state.email = document.getElementById("s-email").value.trim();
+  state.password = document.getElementById("s-pass").value;
+  const confirm = document.getElementById("s-pass2").value;
+  if (!state.name || !state.phone || !state.email || !state.password) { toast("Please fill in all fields.", "error"); return; }
+  if (state.password.length < 6) { toast("Password must be at least 6 characters.", "error"); return; }
+  if (state.password !== confirm) { toast("Passwords don't match.", "error"); return; }
+  showStep(2);
+});
+
+document.getElementById("google-btn")?.addEventListener("click", async () => {
+  try {
+    const { isNewProfile, user } = await signInWithGoogle();
+    if (isNewProfile) location.href = `signup.html?complete=1&uid=${user.uid}`;
+    else location.href = "index.html";
+  } catch (err) { toast(friendlyAuthError(err), "error"); }
+});
+
+// ---- Step 2 ----
+document.querySelectorAll(".role-card").forEach(card => {
+  card.addEventListener("click", () => {
+    document.querySelectorAll(".role-card").forEach(c => c.classList.remove("selected"));
+    card.classList.add("selected");
+    role = card.dataset.role;
+  });
+});
+document.getElementById("back-to-1")?.addEventListener("click", () => showStep(completeMode ? 2 : 1));
+document.getElementById("to-step3").addEventListener("click", () => {
+  if (!role) { toast("Please choose Farmer/Seller or Buyer.", "error"); return; }
+  showStep(3);
+});
+
+// ---- Step 3: location ----
+const regionSel = document.getElementById("s-region");
+const zoneSel = document.getElementById("s-zone");
+const citySel = document.getElementById("s-city");
+regionSel.innerHTML = `<option value="">Select region</option>` + getRegions().map(r => `<option>${r}</option>`).join("");
+regionSel.addEventListener("change", () => {
+  zoneSel.innerHTML = `<option value="">Select zone</option>` + getZones(regionSel.value).map(z => `<option>${z}</option>`).join("");
+  citySel.innerHTML = `<option value="">Select city</option>`;
+});
+zoneSel.addEventListener("change", () => {
+  citySel.innerHTML = `<option value="">Select city</option>` + getCities(regionSel.value, zoneSel.value).map(c => `<option>${c.city}</option>`).join("");
+});
+
+document.getElementById("use-gps-btn").addEventListener("click", async () => {
+  document.getElementById("gps-status").textContent = "Requesting location…";
+  const loc = await getBrowserLocation();
+  if (loc) {
+    gpsCoords = loc;
+    document.getElementById("gps-status").textContent = "✓ Using your current GPS location.";
+  } else {
+    document.getElementById("gps-status").textContent = "Location access was denied. Please select your location manually below.";
+  }
+});
+document.getElementById("back-to-2").addEventListener("click", () => showStep(2));
+
+document.getElementById("finish-signup").addEventListener("click", async () => {
+  let location_ = null;
+  if (gpsCoords) {
+    location_ = { region: null, zone: null, city: null, latitude: gpsCoords.lat, longitude: gpsCoords.lng };
+  } else if (regionSel.value && zoneSel.value && citySel.value) {
+    const coords = findCoords(regionSel.value, zoneSel.value, citySel.value);
+    location_ = { region: regionSel.value, zone: zoneSel.value, city: citySel.value, latitude: coords?.lat ?? null, longitude: coords?.lng ?? null };
+  } else {
+    toast("Please set your location using GPS or the dropdowns.", "error");
+    return;
+  }
+  setStoredLocation({ lat: location_.latitude, lng: location_.longitude });
+
+  const btn = document.getElementById("finish-signup");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating account…';
+  try {
+    if (completeMode) {
+      const phone = document.getElementById("s-phone-2").value.trim();
+      await completeGoogleProfile(completeUid, { phone, role, location: location_ });
+    } else {
+      await signUpWithEmail({ ...state, role, location: location_ });
+    }
+    location.href = "index.html";
+  } catch (err) {
+    toast(friendlyAuthError(err), "error");
+    btn.disabled = false; btn.textContent = "Create account";
+  }
+});
+</script>
+</body>
+</html>

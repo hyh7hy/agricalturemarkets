@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saved Offers — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/marketplace.css">
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+    <nav class="header-nav" style="margin-left:auto">
+      <a href="index.html" data-nav-link>Home</a>
+      <a href="my-offers.html" data-nav-link>My Offers</a>
+      <a href="saved.html" data-nav-link class="active">Saved</a>
+      <a href="support.html" data-nav-link>Support</a>
+    </nav>
+  </div>
+</header>
+<main class="container">
+  <div id="gate-notice" style="display:none" class="gate-notice">
+    <h3>Sign in to see your saved offers</h3>
+    <a href="login.html" class="btn btn-primary">Sign in</a>
+  </div>
+  <div id="dash" style="display:none">
+    <div class="page-head"><h1>Saved</h1></div>
+    <div class="offer-grid" id="grid"></div>
+  </div>
+</main>
+<nav class="bottom-nav">
+  <a href="index.html" data-nav-link><span class="bn-icon">🏠</span>Home</a>
+  <a href="index.html#search" data-nav-link><span class="bn-icon">🔎</span>Search</a>
+  <a href="post-offer.html" class="post-btn"><span class="bn-icon">➕</span>Post</a>
+  <a href="my-offers.html" data-nav-link><span class="bn-icon">📊</span>My Offers</a>
+  <a href="profile.html" data-nav-link><span class="bn-icon">👤</span>Profile</a>
+</nav>
+<script type="module">
+import { requireAuth } from "./js/auth.js";
+import { getSavedOfferIds, getOffer } from "./js/offers.js";
+import { getProduct, placeholderFor } from "./js/products.js";
+import { escapeHtml } from "./js/app.js";
+
+requireAuth({
+  onReady: async (user) => {
+    document.getElementById("dash").style.display = "block";
+    const grid = document.getElementById("grid");
+    const ids = await getSavedOfferIds(user.uid).catch(() => []);
+    if (!ids.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="emoji">🤍</div><h3>No saved offers yet</h3><p>Tap the heart on any offer to save it for later.</p></div>`;
+      return;
+    }
+    const offers = (await Promise.all(ids.map(id => getOffer(id).catch(() => null)))).filter(Boolean);
+    grid.innerHTML = offers.map(o => {
+      const product = getProduct(o.productId) || { category: o.category };
+      return `<a class="offer-card" href="offer.html?id=${o.id}">
+        <div class="thumb"><img src="${product.image || placeholderFor(product)}" onerror="this.src='${placeholderFor(product)}'"></div>
+        <div class="body"><div class="name">${escapeHtml(o.productName)}</div><div class="price">${o.pricePerKg} ETB<small> /kg</small></div>
+        <div class="meta"><span>📦 ${o.quantity} ${o.unit}</span><span>📍 ${escapeHtml(o.city||'—')}</span></div></div>
+      </a>`;
+    }).join("");
+  },
+  onSignedOut: () => document.getElementById("gate-notice").style.display = "block",
+  onIncompleteProfile: () => document.getElementById("gate-notice").style.display = "block"
+});
+</script>
+</body>
+</html>

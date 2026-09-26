@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+    <nav class="header-nav" style="margin-left:auto">
+      <a href="index.html" data-nav-link>Home</a>
+      <a href="support.html" data-nav-link class="active">Support</a>
+    </nav>
+  </div>
+</header>
+<main class="container" style="max-width:640px">
+  <div class="support-hero">
+    <h1 style="font-size:1.6rem">AgriMarket Support</h1>
+    <p class="text-muted">Need help with AgriMarket? Contact us.</p>
+  </div>
+  <div class="support-contacts">
+    <div class="support-contact">
+      <div class="sc-emoji">📞</div>
+      <div style="font-weight:700;margin:6px 0">0996350347</div>
+      <a href="tel:0996350347" class="btn btn-primary btn-sm">Call Support</a>
+    </div>
+    <div class="support-contact">
+      <div class="sc-emoji">✉️</div>
+      <div style="font-weight:700;margin:6px 0;word-break:break-all">haanifawol@gmail.com</div>
+      <a href="mailto:haanifawol@gmail.com" class="btn btn-outline btn-sm">Email Support</a>
+    </div>
+  </div>
+
+  <div class="surface pad-lg">
+    <h3>Send us a message</h3>
+    <form id="support-form">
+      <div class="field-row">
+        <div class="field"><label for="sf-name">Name</label><input id="sf-name" required></div>
+        <div class="field"><label for="sf-email">Email</label><input type="email" id="sf-email" required></div>
+      </div>
+      <div class="field"><label for="sf-phone">Phone <span class="text-muted">(optional)</span></label><input id="sf-phone" type="tel"></div>
+      <div class="field"><label for="sf-subject">Subject</label><input id="sf-subject" required></div>
+      <div class="field"><label for="sf-message">Message</label><textarea id="sf-message" rows="4" required></textarea></div>
+      <button class="btn btn-primary btn-block" id="sf-submit" type="submit">Send message</button>
+    </form>
+  </div>
+</main>
+<script type="module">
+import { submitSupportMessage } from "./js/offers.js";
+import { toast } from "./js/app.js";
+
+document.getElementById("support-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("sf-submit");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Sending…';
+  try {
+    await submitSupportMessage({
+      name: document.getElementById("sf-name").value.trim(),
+      email: document.getElementById("sf-email").value.trim(),
+      phone: document.getElementById("sf-phone").value.trim(),
+      subject: document.getElementById("sf-subject").value.trim(),
+      message: document.getElementById("sf-message").value.trim()
+    });
+    toast("Message sent. We'll get back to you soon.");
+    e.target.reset();
+  } catch (err) {
+    toast("Your message couldn't be sent. Please try again or call us directly.", "error");
+  }
+  btn.disabled = false; btn.textContent = "Send message";
+});
+</script>
+</body>
+</html>

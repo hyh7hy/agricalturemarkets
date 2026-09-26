@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Post an Offer — AgriMarket</title>
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/auth.css">
+<link rel="stylesheet" href="css/marketplace.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a href="index.html" class="brand"><span class="brand-mark">🌾</span>AgriMarket</a>
+    <div class="header-nav" style="margin-left:auto"><a href="my-offers.html">My Offers</a></div>
+  </div>
+</header>
+
+<main class="container" style="max-width:640px;padding-top:20px">
+  <div class="page-head"><h1>Post an Offer</h1></div>
+  <div class="step-dots" id="step-dots"></div>
+
+  <div id="gate-notice" style="display:none" class="gate-notice">
+    <h3>Sign in to post an offer</h3>
+    <p class="text-muted">Create an account or sign in to list what you're selling or looking to buy.</p>
+    <a href="login.html" class="btn btn-primary">Sign in</a>
+  </div>
+
+  <form id="offer-form" style="display:none">
+    <section class="step-panel active surface pad-lg" data-step="1">
+      <h3 id="step1-title">What are you offering?</h3>
+      <div class="field"><label for="of-category">Category</label>
+        <select id="of-category" required></select>
+      </div>
+      <div class="field"><label for="of-product">Product</label>
+        <select id="of-product" required></select>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="of-qty">Quantity</label><input type="number" id="of-qty" min="1" required></div>
+        <div class="field"><label for="of-unit">Unit</label>
+          <select id="of-unit"><option value="kg">kg</option><option value="quintal">quintal (100kg)</option><option value="ton">ton</option></select>
+        </div>
+      </div>
+      <div class="step-actions"><button type="button" class="btn btn-primary" data-next>Continue</button></div>
+    </section>
+
+    <section class="step-panel surface pad-lg" data-step="2">
+      <h3>Price</h3>
+      <div class="field"><label for="of-price">Price per kg (ETB)</label><input type="number" id="of-price" min="1" required></div>
+      <div class="field"><label>Price type</label>
+        <div class="toggle-row">
+          <button type="button" class="active" data-price-type="fixed">Fixed</button>
+          <button type="button" data-price-type="negotiable">Negotiable</button>
+        </div>
+      </div>
+      <div class="step-actions">
+        <button type="button" class="btn btn-outline" data-back>Back</button>
+        <button type="button" class="btn btn-primary" data-next>Continue</button>
+      </div>
+    </section>
+
+    <section class="step-panel surface pad-lg" data-step="3">
+      <h3>Location</h3>
+      <button type="button" class="btn btn-outline btn-block" id="of-gps-btn" style="margin-bottom:16px">📍 Use my current location</button>
+      <div class="auth-divider">or select manually</div>
+      <div class="field"><label for="of-region">Region</label><select id="of-region"></select></div>
+      <div class="field"><label for="of-zone">Zone</label><select id="of-zone"></select></div>
+      <div class="field"><label for="of-city">City / Town</label><select id="of-city"></select></div>
+      <p class="hint" id="of-gps-status"></p>
+      <div class="step-actions">
+        <button type="button" class="btn btn-outline" data-back>Back</button>
+        <button type="button" class="btn btn-primary" data-next>Continue</button>
+      </div>
+    </section>
+
+    <section class="step-panel surface pad-lg" data-step="4">
+      <h3>Additional information</h3>
+      <div class="field"><label for="of-desc">Description <span class="text-muted">(optional)</span></label><textarea id="of-desc" rows="3" maxlength="2000"></textarea></div>
+      <div class="field"><label for="of-quality">Quality / Grade <span class="text-muted">(optional)</span></label><input id="of-quality"></div>
+      <div class="field"><label for="of-harvest">Harvest information <span class="text-muted">(optional)</span></label><input id="of-harvest"></div>
+      <div class="field-row">
+        <div class="field"><label for="of-contact">Preferred contact</label>
+          <select id="of-contact"><option value="phone">Phone call</option><option value="either">Phone or in person</option></select>
+        </div>
+        <div class="field"><label for="of-avail">Availability date <span class="text-muted">(optional)</span></label><input type="date" id="of-avail"></div>
+      </div>
+      <div class="field"><label for="of-transport">Your own transport cost estimate, ETB <span class="text-muted">(optional — used instead of our default estimate)</span></label><input type="number" id="of-transport" min="0"></div>
+      <div class="step-actions">
+        <button type="button" class="btn btn-outline" data-back>Back</button>
+        <button type="button" class="btn btn-primary" id="to-preview">Preview offer</button>
+      </div>
+    </section>
+
+    <section class="step-panel surface pad-lg" data-step="5">
+      <h3>Preview</h3>
+      <div id="preview-box"></div>
+      <div class="step-actions">
+        <button type="button" class="btn btn-outline" data-back>Back</button>
+        <button type="button" class="btn btn-accent" id="publish-btn">Publish offer</button>
+      </div>
+    </section>
+  </form>
+
+  <div id="success-box" style="display:none" class="surface pad-lg" style="text-align:center">
+    <h3>Your offer is live! 🎉</h3>
+    <p class="text-muted">Buyers and sellers nearby can now find it.</p>
+    <a href="my-offers.html" class="btn btn-primary">Go to My Offers</a>
+  </div>
+</main>
+
+<script type="module">
+import { requireAuth } from "./js/auth.js";
+import { CATEGORIES, PRODUCTS, getProduct } from "./js/products.js";
+import { getRegions, getZones, getCities, findCoords } from "./js/locations.js";
+import { getBrowserLocation, toast, escapeHtml } from "./js/app.js";
+import { createOffer } from "./js/offers.js";
+import { calcNetReturn, formatETB, toKg } from "./js/calculations.js";
+
+let user = null, profile = null;
+let step = 1;
+let gpsCoords = null;
+
+requireAuth({
+  onReady: (u, p) => {
+    user = u; profile = p;
+    document.getElementById("offer-form").style.display = "block";
+    document.getElementById("step1-title").textContent = p.role === "seller" ? "What are you selling?" : "What are you looking to buy?";
+    initForm();
+  },
+  onSignedOut: () => document.getElementById("gate-notice").style.display = "block",
+  onIncompleteProfile: () => document.getElementById("gate-notice").style.display = "block"
+});
+
+function initForm() {
+  const catSel = document.getElementById("of-category");
+  catSel.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join("");
+  function refreshProducts() {
+    const list = PRODUCTS.filter(p => p.category === catSel.value);
+    document.getElementById("of-product").innerHTML = list.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  }
+  catSel.addEventListener("change", refreshProducts);
+  refreshProducts();
+
+  const regionSel = document.getElementById("of-region");
+  const zoneSel = document.getElementById("of-zone");
+  const citySel = document.getElementById("of-city");
+  regionSel.innerHTML = `<option value="">Select region</option>` + getRegions().map(r => `<option>${r}</option>`).join("");
+  regionSel.addEventListener("change", () => {
+    zoneSel.innerHTML = `<option value="">Select zone</option>` + getZones(regionSel.value).map(z => `<option>${z}</option>`).join("");
+    citySel.innerHTML = `<option value="">Select city</option>`;
+  });
+  zoneSel.addEventListener("change", () => {
+    citySel.innerHTML = `<option value="">Select city</option>` + getCities(regionSel.value, zoneSel.value).map(c => `<option>${c.city}</option>`).join("");
+  });
+  document.getElementById("of-gps-btn").addEventListener("click", async () => {
+    document.getElementById("of-gps-status").textContent = "Requesting location…";
+    const loc = await getBrowserLocation();
+    if (loc) { gpsCoords = loc; document.getElementById("of-gps-status").textContent = "✓ Using your current GPS location."; }
+    else document.getElementById("of-gps-status").textContent = "Location access was denied. Please select your location manually.";
+  });
+
+  document.querySelectorAll("[data-price-type]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-price-type]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+
+  document.querySelectorAll("[data-next]").forEach(btn => btn.addEventListener("click", () => {
+    if (!validateStep(step)) return;
+    goStep(step + 1);
+  }));
+  document.querySelectorAll("[data-back]").forEach(btn => btn.addEventListener("click", () => goStep(step - 1)));
+  document.getElementById("to-preview").addEventListener("click", () => { if (validateStep(4)) { renderPreview(); goStep(5); } });
+  document.getElementById("publish-btn").addEventListener("click", publish);
+  renderDots();
+}
+
+function validateStep(n) {
+  if (n === 1) {
+    if (!document.getElementById("of-qty").value || Number(document.getElementById("of-qty").value) <= 0) { toast("Please enter a valid quantity.", "error"); return false; }
+  }
+  if (n === 2) {
+    if (!document.getElementById("of-price").value || Number(document.getElementById("of-price").value) <= 0) { toast("Please enter a valid price.", "error"); return false; }
+  }
+  if (n === 3) {
+    const hasManual = document.getElementById("of-region").value && document.getElementById("of-zone").value && document.getElementById("of-city").value;
+    if (!gpsCoords && !hasManual) { toast("Please set a location using GPS or the dropdowns.", "error"); return false; }
+  }
+  return true;
+}
+
+function goStep(n) {
+  step = n;
+  document.querySelectorAll(".step-panel").forEach(p => p.classList.toggle("active", Number(p.dataset.step) === n));
+  renderDots();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function renderDots() {
+  document.getElementById("step-dots").innerHTML = [1,2,3,4,5].map(s => `<span class="dot ${s===step?"active":""}"></span>`).join("");
+}
+
+function collect() {
+  const productId = document.getElementById("of-product").value;
+  const product = getProduct(productId);
+  const priceType = document.querySelector("[data-price-type].active")?.dataset.priceType || "fixed";
+  let region = null, zone = null, city = null, latitude = null, longitude = null;
+  if (gpsCoords) { latitude = gpsCoords.lat; longitude = gpsCoords.lng; }
+  else {
+    region = document.getElementById("of-region").value;
+    zone = document.getElementById("of-zone").value;
+    city = document.getElementById("of-city").value;
+    const c = findCoords(region, zone, city);
+    latitude = c?.lat ?? null; longitude = c?.lng ?? null;
+  }
+  return {
+    productId, productName: product?.name || productId, category: document.getElementById("of-category").value,
+    quantity: document.getElementById("of-qty").value, unit: document.getElementById("of-unit").value,
+    pricePerKg: document.getElementById("of-price").value, priceType,
+    region, zone, city, latitude, longitude,
+    description: document.getElementById("of-desc").value,
+    quality: document.getElementById("of-quality").value,
+    harvestInfo: document.getElementById("of-harvest").value,
+    preferredContact: document.getElementById("of-contact").value,
+    availabilityDate: document.getElementById("of-avail").value || null,
+    reportedTransportCost: document.getElementById("of-transport").value || null
+  };
+}
+
+function renderPreview() {
+  const d = collect();
+  const qtyKg = toKg(d.quantity, d.unit);
+  const econ = d.reportedTransportCost ? calcNetReturn({ pricePerKg: Number(d.pricePerKg), quantityKg: qtyKg, transportCost: Number(d.reportedTransportCost) }) : null;
+  document.getElementById("preview-box").innerHTML = `
+    <div class="offer-card" style="max-width:280px;margin-bottom:16px">
+      <div class="thumb"><img src="${getProduct(d.productId)?.image}" alt=""></div>
+      <div class="body">
+        <div class="name">${escapeHtml(d.productName)}</div>
+        <div class="price">${d.pricePerKg} ETB<small> /kg</small></div>
+        <div class="meta"><span>📦 ${d.quantity} ${d.unit}</span><span>📍 ${escapeHtml(d.city || "GPS location")}</span></div>
+      </div>
+    </div>
+    ${d.description ? `<p><strong>Description:</strong> ${escapeHtml(d.description)}</p>` : ""}
+    ${econ ? `<div class="econ-box"><div class="econ-row"><span>Selling value</span><span>${formatETB(econ.gross)}</span></div><div class="econ-row"><span>Your transport estimate</span><span>${formatETB(econ.transportCost)}</span></div><div class="econ-row total"><span>Estimated net return</span><span>${formatETB(econ.net)}</span></div></div>` : ""}
+  `;
+}
+
+async function publish() {
+  const btn = document.getElementById("publish-btn");
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Posting offer…';
+  try {
+    const d = collect();
+    await createOffer(user.uid, profile.role, d);
+    document.getElementById("offer-form").style.display = "none";
+    document.getElementById("success-box").style.display = "block";
+  } catch (err) {
+    toast("Your offer couldn't be posted. Please try again.", "error");
+    btn.disabled = false; btn.textContent = "Publish offer";
+  }
+}
+</script>
+</body>
+</html>
